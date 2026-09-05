@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"unsafe"
 
+	"github.com/tetratelabs/wazero/internal/engine/wazevo/wazevoapi"
 	"github.com/tetratelabs/wazero/internal/filecache"
 	"github.com/tetratelabs/wazero/internal/platform"
 	"github.com/tetratelabs/wazero/internal/testing/require"
@@ -73,9 +75,15 @@ func snapshotCacheFiles(t *testing.T, dir string) map[string]string {
 }
 
 func TestDeserializeCompiledModuleReleasesMapping(t *testing.T) {
+	executable := []byte{1, 2, 3, 4}
 	cm := &compiledModule{
-		executables:     &executables{executable: []byte{1, 2, 3, 4}},
+		executables:     &executables{executable: executable},
 		functionOffsets: []int{0},
+		sourceMap: sourceMap{
+			executableOffsets: []uintptr{uintptr(unsafe.Pointer(&executable[0]))},
+			wasmBinaryOffsets: []uint64{0},
+		},
+		catchClauseTable: [][]wazevoapi.CatchClauseInstance{{{Kind: 0, TagIndex: 0}}},
 	}
 	data, err := io.ReadAll(serializeCompiledModule(testVersion, cm))
 	require.NoError(t, err)
