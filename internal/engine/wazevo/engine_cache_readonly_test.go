@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/tetratelabs/wazero/internal/filecache"
@@ -23,6 +24,12 @@ func TestReadOnlyCacheStopsBeforeGuestCompilation(t *testing.T) {
 		defer func() { require.True(t, recover() != nil) }()
 		_, _ = (&engine{}).compileModule(context.Background(), module, nil, false)
 	})
+	encoded, err := io.ReadAll(serializeCompiledModule(testVersion, &compiledModule{
+		executables: &executables{executable: []byte{1, 2, 3, 4}}, functionOffsets: []int{0},
+	}))
+	require.NoError(t, err)
+	badChecksum := bytes.Clone(encoded)
+	badChecksum[len(encoded)-9] ^= 0xff
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -31,6 +38,8 @@ func TestReadOnlyCacheStopsBeforeGuestCompilation(t *testing.T) {
 		{"missing", nil, filecache.ErrMiss},
 		{"stale", concat(magic, []byte{byte(len(testVersion))}, []byte("9.9.9"), make([]byte, 4)), filecache.ErrStale},
 		{"corrupt", []byte("broken"), filecache.ErrCorrupt},
+		{"stale after mmap", encoded[:len(encoded)-4], filecache.ErrStale},
+		{"checksum after mmap", badChecksum, filecache.ErrCorrupt},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -74,7 +83,7 @@ func TestDeserializeCompiledModuleReleasesMapping(t *testing.T) {
 	// including the stale old-format path with no catch-clause table.
 	codeStart := len(magic) + 1 + len(testVersion) + 4 + 8 + 8
 	for end := codeStart; end < len(data); end++ {
-		t.Run(string(rune('a'+end-codeStart)), func(t *testing.T) {
+		t.Run(strconv.Itoa(end-codeStart), func(t *testing.T) {
 			unmapped := 0
 			got, stale, err := deserializeCompiledModuleWithUnmap(testVersion, io.NopCloser(bytes.NewReader(data[:end])), func(b []byte) error {
 				unmapped++
@@ -114,4 +123,19 @@ func TestDeserializeCompiledModuleEmptyExecutable(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, stale)
 	require.Equal(t, 0, len(got.executable))
+}
+
+func TestReadWriteCacheStillDeletesStale(t *testing.T) {
+	dir := t.TempDir()
+	fc := filecache.New(dir)
+	module := &wasm.Module{}
+	data := concat(magic, []byte{byte(len(testVersion))}, []byte("9.9.9"), make([]byte, 4))
+	require.NoError(t, fc.Add(fileCacheKey(module), bytes.NewReader(data)))
+	e := &engine{fileCache: fc, wazeroVersion: testVersion}
+	_, hit, err := e.getCompiledModuleFromCache(module)
+	require.NoError(t, err)
+	require.False(t, hit)
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(entries))
 }

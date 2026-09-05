@@ -65,7 +65,7 @@ func TestCompilationCacheReadOnly(t *testing.T) {
 		r = NewRuntimeWithConfig(ctx, NewRuntimeConfigCompiler().WithCompilationCache(c))
 		m, err := r.Instantiate(ctx, facWasm)
 		require.NoError(t, err)
-		result, err := m.ExportedFunction("fac").Call(ctx, 5)
+		result, err := m.ExportedFunction("fac-ssa").Call(ctx, 5)
 		require.NoError(t, err)
 		require.Equal(t, []uint64{120}, result)
 		_, err = r.CompileModule(ctx, memGrowWasm)
