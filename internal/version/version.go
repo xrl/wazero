@@ -2,7 +2,6 @@ package version
 
 import (
 	"runtime/debug"
-	"strings"
 )
 
 // Default is the default version value used when none was found.
@@ -14,7 +13,7 @@ var version string
 // GetWazeroVersion returns the current version of wazero either in the go.mod or set by ldflag for wazero CLI.
 //
 // If this is not CLI, this assumes that downstream users of wazero imports wazero as "github.com/tetratelabs/wazero".
-// To be precise, the returned string matches the require statement there.
+// A replacement module takes precedence over the require statement.
 // For example, if the go.mod has "require github.com/tetratelabs/wazero 0.1.2-12314124-abcd",
 // then this returns "0.1.2-12314124-abcd".
 //
@@ -26,17 +25,7 @@ func GetWazeroVersion() (ret string) {
 
 	info, ok := debug.ReadBuildInfo()
 	if ok {
-		for _, dep := range info.Deps {
-			// Note: here's the assumption that wazero is imported as github.com/tetratelabs/wazero.
-			if strings.Contains(dep.Path, "github.com/tetratelabs/wazero") {
-				ret = dep.Version
-			}
-		}
-
-		// In wazero CLI, wazero is a main module, so we have to get the version info from info.Main.
-		if versionMissing(ret) {
-			ret = info.Main.Version
-		}
+		ret = buildInfoVersion(info)
 	}
 	if versionMissing(ret) {
 		return Default // don't return parens
@@ -49,4 +38,24 @@ func GetWazeroVersion() (ret string) {
 
 func versionMissing(ret string) bool {
 	return ret == "" || ret == "(devel)" // pkg.go defaults to (devel)
+}
+
+// buildInfoVersion uses the actual replacement, never the replaced upstream
+// version. Local replacements have no reproducible version and remain dev.
+func buildInfoVersion(info *debug.BuildInfo) string {
+	for _, dep := range info.Deps {
+		if dep.Path == "github.com/tetratelabs/wazero" {
+			if dep.Replace != nil {
+				dep = dep.Replace
+			}
+			if versionMissing(dep.Version) {
+				return Default
+			}
+			return dep.Version
+		}
+	}
+	if versionMissing(info.Main.Version) {
+		return Default
+	}
+	return info.Main.Version
 }

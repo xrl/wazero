@@ -128,12 +128,15 @@ type RuntimeConfig interface {
 	//
 	// # Cache Key
 	//
-	// Cached files are keyed on the version of wazero. This is obtained from go.mod of your application,
+	// Cached files are keyed on the version of wazero (the replacement version, when present).
+	// This is obtained from go.mod of your application,
 	// and we use it to verify the compatibility of caches against the currently-running wazero.
 	// However, if you use this in tests of a package not named as `main`, then wazero cannot obtain the correct
 	// version of wazero due to the known issue of debug.BuildInfo function: https://github.com/golang/go/issues/33976.
 	// As a consequence, your cache won't contain the correct version information and always be treated as `dev` version.
 	// To avoid this issue, you can pass -ldflags "-X github.com/tetratelabs/wazero/internal/version.version=foo" when running tests.
+	// NewCompilationCacheWithDirReadOnly requires hits and rejects guest compilation
+	// on interpreter runtimes, including automatic fallback on unsupported platforms.
 	WithCompilationCache(CompilationCache) RuntimeConfig
 
 	// WithCustomSections toggles parsing of "custom sections". Defaults to false.
