@@ -205,12 +205,17 @@ func serializeCompiledModule(wazeroVersion string, cm *compiledModule) io.Reader
 	return bytes.NewReader(buf.Bytes())
 }
 
-func deserializeCompiledModule(wazeroVersion string, reader io.ReadCloser) (cm *compiledModule, staleCache bool, err error) {
+func deserializeCompiledModule(wazeroVersion string, reader io.ReadCloser) (*compiledModule, bool, error) {
+	return deserializeCompiledModuleWithUnmap(wazeroVersion, reader, platform.MunmapCodeSegment)
+}
+
+// The unmap parameter lets tests verify ownership on every unsuccessful load.
+func deserializeCompiledModuleWithUnmap(wazeroVersion string, reader io.ReadCloser, unmap func([]byte) error) (cm *compiledModule, staleCache bool, err error) {
 	defer reader.Close()
 	var mapped []byte
 	defer func() {
 		if len(mapped) > 0 && (err != nil || staleCache) {
-			if unmapErr := platform.MunmapCodeSegment(mapped); unmapErr != nil {
+			if unmapErr := unmap(mapped); unmapErr != nil {
 				err = errors.Join(err, fmt.Errorf("compilationcache: unmap failed: %w", unmapErr))
 			}
 		}
