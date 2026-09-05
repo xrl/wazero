@@ -1,0 +1,31 @@
+name: xrl require-hit cache
+on:
+  pull_request:
+    branches: [xrl/integration]
+  push:
+    branches: [xrl/integration]
+permissions:
+  contents: read
+jobs:
+  cache:
+    if: github.repository == 'xrl/wazero'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - name: Native compiler and interpreter cache tests
+        run: |
+          go version
+          go test -race . ./internal/filecache ./internal/version ./internal/engine/wazevo ./internal/engine/interpreter
+      - name: Unsupported-platform fallback
+        if: matrix.os == 'ubuntu-24.04'
+        run: GOARCH=386 go test . -run '^TestCompilationCacheReadOnly' -count=1
