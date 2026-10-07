@@ -39,7 +39,11 @@ func TestReadOnly(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entries))
-	// An intermediate non-directory gives a deterministic I/O failure even as root.
-	_, _, err = NewReadOnly(rw.path(key)).Get(key)
+	r, hit, err = NewReadOnly(dir + "\x00").Get(key)
+	require.Nil(t, r)
+	require.False(t, hit)
 	require.True(t, errors.Is(err, ErrIO))
+	require.False(t, errors.Is(err, ErrMiss))
+	var pathErr *os.PathError
+	require.True(t, errors.As(err, &pathErr))
 }
